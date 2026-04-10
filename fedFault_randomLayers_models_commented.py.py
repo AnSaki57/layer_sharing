@@ -62,7 +62,7 @@ COUNT_THRESHOLD = 5    # consecutive stable rounds needed
 def send_message(conn, message):
     """
     Serialise message into binary format (pickle it) and send it over conn
-    Prefix with a 4-byte length header
+    Prefix with a 4-byte length header, specify big-endian byte order
     """
     data = pickle.dumps(message, protocol=pickle.HIGHEST_PROTOCOL)
     message_length = struct.pack('!I', len(data))
@@ -81,6 +81,9 @@ def _recv_exact(conn, nbytes: int):
 
 
 def receive_message(conn):
+    """
+    Counterpart to send_message, reads the 4-byte header then the rest of the message
+    """
     hdr = _recv_exact(conn, 4)
     if not hdr:
         return None
@@ -94,6 +97,10 @@ def receive_message(conn):
 # --- Input parsing ---
 
 def parse_input_file():
+    """
+    Reads 'inputf.txt', configues distributed cluster
+    Extracts client count, IP addrs, simulated crashes
+    """
     try:
         with open("inputf.txt", "r") as file:
             lines = file.read().splitlines()
@@ -127,6 +134,7 @@ def parse_input_file():
 
 # --- Module-level setup ---
 
+# Initialise global configuration based on the input file
 NUM_CLIENTS, NUM_MACHINES, CURRENT_MACHINE_IP, ips, faults = parse_input_file()
 
 if NUM_CLIENTS is None:
@@ -134,6 +142,7 @@ if NUM_CLIENTS is None:
     exit(1)
 
 # Logger: console handler added now; file handler added in main() once model name is known.
+# Outputs formatted logs to monitor to check training progress, crashes
 logger = logging.getLogger('federated_learning')
 logger.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -145,11 +154,17 @@ logger.addHandler(console_handler)
 
 
 class CrashFilter(logging.Filter):
+    """
+    Isolates logs regarding crashes
+    """
     def filter(self, record):
         return "crash" in record.msg.lower() or "crashing" in record.msg.lower()
 
 
 class LoggerWriter:
+    """
+    Utility to redirect stdout to the logging framework
+    """
     def __init__(self, logger, level):
         self.logger = logger
         self.level = level
@@ -164,12 +179,14 @@ class LoggerWriter:
 
 sys.stdout = LoggerWriter(logger, logging.INFO)
 
+# More global variables, for client comms and anjacency
 retries_list = [1] * NUM_CLIENTS
 adj = [[j for j in range(NUM_CLIENTS) if j != i] for i in range(NUM_CLIENTS)]
 terminate_messages = [0] * NUM_CLIENTS
 model_messages = [0] * NUM_CLIENTS
 
 # CIFAR-10 dataset
+# Setup for image classification training
 transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
@@ -182,6 +199,9 @@ indices = np.random.permutation(len(train_dataset))
 
 
 def create_dirichlet_non_iid_splits_fixed(dataset, num_clients, alpha=0.1, fixed_data_per_client=5000):
+    """
+    Splits dataset per client using Dirichlet (non-IID) distribution
+    """
     num_classes = 10
     class_indices = {i: np.where(np.array(dataset.targets) == i)[0] for i in range(num_classes)}
     client_indices = {i: [] for i in range(num_clients)}
@@ -217,10 +237,14 @@ latest_models_lock = threading.Lock()
 
 # =============================================================================
 # Model definitions
+# Various NN architecture definitions
 # =============================================================================
 
 # --- Option 1: SimpleCNN (small, original) ---
 class SimpleCNN(nn.Module):
+    """
+    4-layer CNN, for small-scale testing
+    """
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Conv2d(3, 32, kernel_size=3)
@@ -240,6 +264,9 @@ class SimpleCNN(nn.Module):
 
 # --- Option 2: SimpleCNN10 (10-layer deep CNN) ---
 class SimpleCNN10(nn.Module):
+    """
+    10-layer CNN with Batch Normalisation
+    """
     def __init__(self, num_classes=10):
         super().__init__()
         self.features = nn.Sequential(
@@ -275,6 +302,9 @@ class SimpleCNN10(nn.Module):
 
 # --- VGG variants with BatchNorm (CIFAR-friendly, 1×1 spatial output after 5 pools) ---
 def _make_vgg_layers(cfg):
+    """
+    Helper to construct VGG layers
+    """
     layers = []
     in_channels = 3
     for v in cfg:
@@ -291,6 +321,9 @@ def _make_vgg_layers(cfg):
 
 
 class VGG(nn.Module):
+    """
+    Generic VGG architecture, used by VGG11/13/16
+    """
     def __init__(self, features, num_classes=10):
         super().__init__()
         self.features = features
@@ -328,6 +361,9 @@ def VGG16BN():
 # Architecture: 3 stages of [16, 32, 64] channels, 3×3 first conv (no maxpool),
 # GlobalAvgPool at end. n=3 → 6n+2 = 20 layers. ~0.27M params.
 class _CifarBasicBlock(nn.Module):
+    """
+    Residual block component, used in ResNet architecture
+    """
     def __init__(self, in_planes, planes, stride=1):
         super().__init__()
         self.conv1 = nn.Conv2d(in_planes, planes, 3, stride=stride, padding=1, bias=False)
@@ -412,25 +448,40 @@ MODEL_NAME_MAP = {
 
 # =============================================================================
 # State-dict / parameter helpers
+# Convert entire models between torch and numpy arrays
 # =============================================================================
 
 def _state_dict_to_numpy(model: nn.Module):
+    """
+    Converts pytorch weights -> numpy array dictionary, 
+    for easy serialisation (flattening into a byte stream for TCP transfer)
+    """
     sd = model.state_dict()
     return {k: v.detach().cpu().numpy() for k, v in sd.items()}
 
 
 def _numpy_to_state_dict_torch(state_np):
+    """
+    Complementary to _state_dict_to_numpy, converts back to pytorch tensors
+    """
     return {k: torch.tensor(v).to(DEVICE) for k, v in state_np.items()}
 
 
 def _logical_layer_key(param_name: str) -> str:
-    """Groups e.g. conv1.weight + conv1.bias under the parent key 'conv1'."""
+    """
+    Groups weights & bias into single logical layer
+    e.g. conv1.weight + conv1.bias under the parent key 'conv1'.
+    """
     if '.' not in param_name:
         return param_name
     return param_name.rsplit('.', 1)[0]
 
 
 def _group_params_by_logical_layer(state_np):
+    """
+    Creates map of logical layer names to contstituent param keys
+    Allows system to exchange entire layers
+    """
     groups = defaultdict(list)
     for name in state_np.keys():
         groups[_logical_layer_key(name)].append(name)
@@ -438,11 +489,18 @@ def _group_params_by_logical_layer(state_np):
 
 
 def _state_dict_to_list_sorted(state_np):
-    """Stable ordering for convergence / similarity checks."""
+    """
+    Stable ordering for convergence / similarity checks.
+    Returns sorted list of weight arrays for consistent comparison ordering 
+    """
     return [state_np[k] for k in sorted(state_np.keys())]
 
 
 def models_are_similar_list(weights1_list, weights2_list, threshold):
+    """
+    Checks closeness of model weights (L2 norm)
+    If close enough, model considered converged
+    """
     for w1, w2 in zip(weights1_list, weights2_list):
         if np.linalg.norm(w1 - w2) > threshold:
             return False
@@ -450,10 +508,13 @@ def models_are_similar_list(weights1_list, weights2_list, threshold):
 
 
 def compute_accuracy(model, data_loader):
+    """
+    Accuracy computation of the model on the dataset
+    """
     model.eval()
     correct = 0
     total = 0
-    with torch.no_grad():
+    with torch.no_grad():   # Disable gradient calculation
         for data, target in data_loader:
             data, target = data.to(DEVICE), target.to(DEVICE)
             output = model(data)
