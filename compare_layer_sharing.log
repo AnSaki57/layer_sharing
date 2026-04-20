@@ -1,0 +1,54 @@
+Traceback (most recent call last):
+  File "/Users/anup/Projects/mini-project-2026/layer_sharing/layer_sharing.py", line 178, in <module>
+    train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/site-packages/torchvision/datasets/cifar.py", line 66, in __init__
+    self.download()
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/site-packages/torchvision/datasets/cifar.py", line 139, in download
+    download_and_extract_archive(self.url, self.root, filename=self.filename, md5=self.tgz_md5)
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/site-packages/torchvision/datasets/utils.py", line 388, in download_and_extract_archive
+    download_url(url, download_root, filename, md5)
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/site-packages/torchvision/datasets/utils.py", line 118, in download_url
+    url = _get_redirect_url(url, max_hops=max_redirect_hops)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/site-packages/torchvision/datasets/utils.py", line 63, in _get_redirect_url
+    with urllib.request.urlopen(urllib.request.Request(url, headers=headers)) as response:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/urllib/request.py", line 215, in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/urllib/request.py", line 515, in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/urllib/request.py", line 532, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/urllib/request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/urllib/request.py", line 1392, in https_open
+    return self.do_open(http.client.HTTPSConnection, req,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/urllib/request.py", line 1344, in do_open
+    h.request(req.get_method(), req.selector, req.data, headers,
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/http/client.py", line 1319, in request
+    self._send_request(method, url, body, headers, encode_chunked)
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/http/client.py", line 1365, in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/http/client.py", line 1314, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/http/client.py", line 1074, in _send_output
+    self.send(msg)
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/http/client.py", line 1018, in send
+    self.connect()
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/http/client.py", line 1460, in connect
+    self.sock = self._context.wrap_socket(self.sock,
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/ssl.py", line 455, in wrap_socket
+    return self.sslsocket_class._create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/ssl.py", line 1046, in _create
+    self.do_handshake()
+  File "/Users/anup/.pyenv/versions/3.12.0/lib/python3.12/ssl.py", line 1317, in do_handshake
+    self._sslobj.do_handshake()
+KeyboardInterrupt
